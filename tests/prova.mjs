@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { catalog } from '../dist/catalog.js';
-import { addAttempt, createExam, finishExam, initialState } from '../dist/engine.mjs';
+import { addAttempt, createExam, discardExam, finishExam, initialState } from '../dist/engine.mjs';
 
 const { questions, rules, topics } = catalog;
 const byId = new Map(questions.map(q => [q.id,q]));
@@ -49,4 +49,21 @@ test('O primeiro erro e o acerto na revisão permanecem em grupos distintos', ()
   assert.ok(!repeat.fresh && repeat.correct);
   assert.equal(new Date(first.due).getDate(),25);
   assert.equal(new Date(repeat.due).getDate(),27);
+});
+
+test('Descartar uma prova libera a próxima e preserva o histórico anterior', () => {
+  const state = initialState();
+  addAttempt(state,questions[0],questions[0].answer,'Estudo');
+  createExam(state,questions,rules);
+  finishExam(state,questions);
+  const previous = structuredClone(state);
+  createExam(state,questions,rules);
+  const firstId = state.active.id;
+  state.active.answers[state.active.ids[0]] = 1;
+  assert.equal(discardExam(state,'outra-prova'),false);
+  assert.equal(discardExam(state,firstId),true);
+  assert.deepEqual(state,previous);
+  createExam(state,questions,rules);
+  assert.equal(discardExam(state,firstId),false);
+  assert.notEqual(state.active.id,firstId);
 });
