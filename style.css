@@ -7,3 +7,5 @@ h1,h2,h3,p{margin:0}h1{font-size:clamp(2.2rem,5vw,3.65rem);line-height:1.07;lett
 .topdate{margin-left:auto;color:var(--muted);font-size:.9rem}.install{margin-left:0}.herocta{display:inline-flex;align-items:center;gap:.45rem;background:#e8e7fe;border:1px solid #eeedff;font-size:.93rem;font-weight:650;text-decoration:none;color:#332d65;border-radius:7px;padding:.62rem .95rem;margin-top:1.15rem}.herocta:hover{background:white}.hero .herotext{padding-top:1.85rem;padding-bottom:1.85rem}.card details+details{margin-top:.8rem}details.row{display:block}dialog .card{padding:.8rem;margin-top:.6rem}dialog .qtext{margin:.6rem 0}
 @media(max-width:620px){.topdate{display:none}.install{margin-left:auto}.hero .herotext{padding:1.2rem}.herocta{margin-top:.85rem}}
 .reader{margin:.75rem 0;background:#f5f5fa;border:1px solid var(--line);border-radius:7px;padding:.6rem .85rem}.reader iframe{display:block;width:100%;height:min(70vh,650px);border:0;margin:.4rem 0}
+
+.exam-exit-note{margin:-.45rem 0 1rem}

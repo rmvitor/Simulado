@@ -49,6 +49,12 @@ export function createExam(state, questions, rules, now = Date.now()) {
     deadline: now + rules.minutes * 60000, rules: structuredClone(rules) };
 }
 
+export function discardExam(state, examId) {
+  if (!state.active || state.active.id !== examId) return false;
+  state.active = null;
+  return true;
+}
+
 export function finishExam(state, questions, now = Date.now()) {
   const exam = state.active;
   if (!exam) return;

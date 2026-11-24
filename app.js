@@ -1,5 +1,5 @@
 import { catalog } from './catalog.js';
-import { initialState, accuracy, addAttempt, latestAttempts, shuffled, createExam, finishExam } from './engine.mjs';
+import { initialState, accuracy, addAttempt, latestAttempts, shuffled, createExam, discardExam, finishExam } from './engine.mjs';
 
 const { questions, topics, rules } = catalog;
 const byId = new Map(questions.map(q => [q.id, q]));
@@ -164,7 +164,8 @@ function exams(){
     <p class="fine">Os itens oficiais abrem o caderno original e precisam de internet. Para estudar offline, selecione somente autorais.</p><div class="actions"><button class="primary" data-start-exam>Iniciar simulado</button></div></section>
     <section class="panel"><h2>Regras da objetiva</h2><p>O cronômetro de 4 horas inclui a marcação das respostas e continua enquanto o app estiver fechado.</p><p>Cada acerto vale 2 pontos. Questões em branco valem zero. O mínimo é 48 de 80 pontos (24 acertos).</p><p>A correção fica disponível ao entregar a prova ou esgotar o tempo. A prova de títulos é uma etapa separada, de até 20 pontos.</p><div class="source">${ext('./materiais/edital.pdf','Consultar edital · itens 10 e 11')}</div></section></div>`;
   const q=byId.get(exam.ids[exam.index]),sel=exam.answers[q.id];
-  return title('Simulado em andamento','Suas marcações são salvas neste dispositivo.')+`<article class="card"><div class="panelhead"><strong>Questão ${exam.index+1} de ${exam.ids.length}</strong><strong class="countdown" id="timer" aria-label="Tempo restante">${timeLeft(exam.deadline)}</strong></div>
+  return title('Simulado em andamento','Suas marcações são salvas neste dispositivo.')+
+    '<div class="actions"><a href="#painel" class="button">Sair e retomar depois</a><button data-ask-discard>Encerrar sem entregar</button></div><p class="fine exam-exit-note">Se sair para retomar depois, o cronômetro continua.</p>'+`<article class="card"><div class="panelhead"><strong>Questão ${exam.index+1} de ${exam.ids.length}</strong><strong class="countdown" id="timer" aria-label="Tempo restante">${timeLeft(exam.deadline)}</strong></div>
   <span class="chip">${originName(q)}</span><span class="meta">${esc(q.area)}</span>${q.referenceOnly?`<p class="meta">${esc(q.source)}</p>`:''}
   <p class="qtext">${esc(q.prompt)}</p>${booklet(q)}${answers(q,sel,null,true)}
   <div class="actions"><button data-exam-index="${exam.index-1}" ${exam.index===0?'disabled':''}>Anterior</button><button data-exam-index="${exam.index+1}" ${exam.index===exam.ids.length-1?'disabled':''}>Próxima</button><button data-clear-choice ${sel==null?'disabled':''}>Deixar em branco</button></div>
@@ -226,8 +227,12 @@ async function handleClick(e){
   else if('examIndex' in d){await saveExamAction(ex=>{const i=+d.examIndex;if(i>=0&&i<ex.ids.length)ex.index=i;});}
   else if('examChoice' in d){await saveExamAction(ex=>{ex.answers[ex.ids[ex.index]]=+d.examChoice;});}
   else if('clearChoice' in d){await saveExamAction(ex=>{delete ex.answers[ex.ids[ex.index]];});}
+  else if('askDiscard' in d&&state.active){
+    showDialog(`<h2>Encerrar sem entregar?</h2><p>As marcações desta prova serão descartadas. Ela não gera nota, tentativas, erros ou revisões. Você poderá começar outro simulado.</p><div class="actions"><button class="primary" data-discard-exam="${esc(state.active.id)}">Encerrar e descartar</button></div>`);
+    return;
+  }
   else if('askFinish' in d&&state.active){
-    showDialog(`<h2>Entregar simulado?</h2><p>${Object.keys(state.active.answers).length} de ${state.active.ids.length} respostas marcadas. A entrega encerra a prova e registra a correção.</p><div class="actions"><button class="primary" id="finish-exam">Confirmar entrega</button></div>`);return;
+    showDialog(`<h2>Entregar simulado?</h2><p>${Object.keys(state.active.answers).length} de ${state.active.ids.length} respostas marcadas. A entrega encerra a prova e registra a correção.</p><div class="actions"><button class="primary" data-finish-exam="${esc(state.active.id)}">Confirmar entrega</button></div>`);return;
   } else if(d.examResult){
     const items=state.attempts.filter(a=>a.sessionId===d.examResult);
     showDialog('<h2>Correção do simulado</h2>'+items.map((a,i)=>`<details class="card"><summary>Questão ${i+1} · ${a.correct?'Acerto':'Erro'}</summary>${correction(a)}</details>`).join(''));return;
@@ -250,9 +255,20 @@ main.addEventListener('change',e=>guarded(async()=>{
   if(el.id==='exam-source')examSource=el.value;
   if(el.dataset.topic){await transact(s=>{const selected=new Set(s.completed);if(el.checked)selected.add(el.dataset.topic);else selected.delete(el.dataset.topic);s.completed=[...selected];});render();}
 }));
-dialog.addEventListener('click',e=>{if(e.target.id==='finish-exam')guarded(async()=>{
-  const id=state.active?.id;await transact(s=>{if(s.active?.id===id&&id)finishExam(s,questions);});dialog.close();location.hash='historico';render();
-});});
+dialog.addEventListener('click',e=>{
+  const button=e.target.closest('button');
+  const discardId=button?.dataset.discardExam, finishId=button?.dataset.finishExam;
+  if(!discardId && !finishId)return;
+  guarded(async()=>{
+    await transact(s=>{
+      if(discardId)discardExam(s,discardId);
+      else if(s.active?.id===finishId)finishExam(s,questions);
+    });
+    dialog.close();
+    location.hash=discardId?'simulados':'historico';
+    render();
+  });
+});
 async function checkClock(){
   if(!state.active)return;
   if(Date.now()>=state.active.deadline){
