@@ -1,6 +1,6 @@
 import { topics } from './topicos.js';
 import { authoredQuestions } from './autorais.js';
-import { officialQuestions, officialSources } from './oficiais.js';
+import { officialQuestions, officialSources, officialReferences } from './oficiais.js';
 export const catalog = {
   topics,
   questions: [...officialQuestions, ...authoredQuestions],
@@ -12,5 +12,6 @@ export const catalog = {
       { area: 'Conhecimentos Específicos', count: 30, points: 2 }
     ]
   },
+  references: officialReferences,
   sources: officialSources
 };

@@ -1,5 +1,5 @@
 const prefix = 'caderno-' + self.registration.scope + '-';
-const cacheName = prefix + 'v2';
+const cacheName = prefix + 'v3';
 const shell = ['./','./index.html','./style.css','./app.js','./engine.mjs','./catalog.js','./topicos.js','./autorais.js','./oficiais.js','./materiais/edital.pdf','./materiais/anexo-ii.pdf','./app.webmanifest','./icon-192.png','./icon-512.png','./estante.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(cacheName).then(c => c.addAll(shell))));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(keys =>

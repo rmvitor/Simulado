@@ -9,3 +9,5 @@ h1,h2,h3,p{margin:0}h1{font-size:clamp(2.2rem,5vw,3.65rem);line-height:1.07;lett
 .reader{margin:.75rem 0;background:#f5f5fa;border:1px solid var(--line);border-radius:7px;padding:.6rem .85rem}.reader iframe{display:block;width:100%;height:min(70vh,650px);border:0;margin:.4rem 0}
 
 .exam-exit-note{margin:-.45rem 0 1rem}
+
+.opt{white-space:pre-line;align-items:baseline}.opt>.option-text{min-width:0}.review-options li{margin:.45rem 0;white-space:pre-line;line-height:1.5}
