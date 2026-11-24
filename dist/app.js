@@ -2,7 +2,8 @@ import { catalog } from './catalog.js';
 import { initialState, accuracy, addAttempt, latestAttempts, shuffled, createExam, discardExam, finishExam } from './engine.mjs';
 
 const { questions, topics, rules } = catalog;
-const byId = new Map(questions.map(q => [q.id, q]));
+const allQuestions = [...questions, ...catalog.references];
+const byId = new Map(allQuestions.map(q => [q.id, q]));
 const topicNames = new Map(topics.map(t => [t.id,t.name]));
 const originName = q => q.origin === 'oficial' ? 'Oficial FAFIPA' : 'Autoral por IA';
 const paths = {
@@ -22,8 +23,14 @@ const nav = [['painel','Painel'],['edital','Edital'],['banco','Questões'],['est
 function icon(key) { return `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[key]}"/></svg>`; }
 const tile = (key,color='') => `<span class="tile ${color}">${icon(key)}</span>`;
 const esc = str => String(str ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const marked = str => esc(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 const ext = (url, label) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
-const sourceLinks = q => `<div class="source">${ext(q.url, q.referenceOnly ? 'Abrir questão no caderno (PDF)' : q.source)}${q.keyUrl ? ext(q.keyUrl,'Gabarito definitivo') : ''}</div>`;
+function sourceLinks(q, showKey=true) {
+  const links=[ext(q.url,q.origin==='oficial'?'Caderno original (PDF)':q.source)];
+  if(q.qcUrl)links.push(ext(q.qcUrl,q.qcCode?'Qconcursos · '+q.qcCode:'Prova no Qconcursos'));
+  if(showKey && q.keyUrl)links.push(ext(q.keyUrl,'Gabarito definitivo'));
+  return '<div class="source">'+links.join('')+'</div>';
+}
 const dateFmt = (ts,opts={day:'2-digit',month:'2-digit',year:'numeric'}) => new Date(ts).toLocaleDateString('pt-BR',opts);
 const choiceLabel = i => i == null ? 'Em branco' : String.fromCharCode(65+i);
 const main = document.getElementById('main');
@@ -113,21 +120,30 @@ function pool(){
 }
 function chips(q,seen){return `<span class="chip ${q.origin==='oficial'?'good':''}">${originName(q)}</span><span class="chip warm">${seen?'Repetida':'Nova'}</span><span class="meta">${esc(q.area)} · ${esc(q.topic)}</span>`;}
 function questionCard(q,seen){
-  return `<article class="card">${chips(q,seen)}<p class="qtext">${esc(q.prompt.slice(0,240))}${q.prompt.length>240?'…':''}</p><div class="meta">${esc(q.source)}</div>
-  <div class="actions"><button data-open="${esc(q.id)}">Resolver</button></div></article>`;
+  return `<article class="card">${chips(q,seen)}<p class="qtext">${esc(q.prompt.replaceAll('**','').slice(0,240))}${q.prompt.length>240?'…':''}</p><div class="meta">${esc(q.source)}</div>
+  <div class="actions">${q.referenceOnly?ext(q.qcUrl,'Consultar no Qconcursos'):'<button data-open="'+esc(q.id)+'">Resolver</button>'}</div></article>`;
 }
 function bank() {
   const qs=pool(),seen=latestAttempts(state);page=Math.min(page,Math.max(0,Math.ceil(qs.length/12)-1));
   return title('Banco de questões',questions.filter(q=>q.origin==='oficial').length+' oficiais da FAFIPA e '+questions.filter(q=>q.origin==='ia').length+' autorais por IA.')+filterBar()+
   `<div class="panelhead"><strong>${qs.length} questões encontradas</strong></div><div class="list">${qs.length?qs.slice(page*12,page*12+12).map(q=>questionCard(q,seen.has(q.id))).join(''):empty('Nenhuma questão corresponde aos filtros.')}</div>
   ${qs.length>12?`<div class="actions"><button data-page="-1" ${page===0?'disabled':''}>Anterior</button><span>Página ${page+1} de ${Math.ceil(qs.length/12)}</span><button data-page="1" ${(page+1)*12>=qs.length?'disabled':''}>Próxima</button></div>`:''}
-  <details class="card" style="margin-top:1rem"><summary>Provas e gabaritos de origem</summary>${catalog.sources.map(s=>`<p>${esc(s.name)}</p><div class="source">${ext(s.url,'Página da banca')} ${ext(s.booklet,'Caderno')} ${ext(s.keyUrl,'Gabarito definitivo')}</div>`).join('')}</details>`;
+  <details class="card" style="margin-top:1rem"><summary>Provas e gabaritos de origem</summary><p>${ext('https://www.qconcursos.com/questoes-de-concursos/bancas/fafipa','Índice de provas da FAFIPA no Qconcursos')}</p>${catalog.sources.map(s=>`<p>${esc(s.name)}</p><div class="source">${ext(s.url,'Página da banca')} ${ext(s.booklet,'Caderno')} ${ext(s.keyUrl,'Gabarito definitivo')} ${s.qcUrl?ext(s.qcUrl,'Prova no Qconcursos'):''}</div>`).join('')}</details>
+  ${catalog.references.length?`<details class="card" style="margin-top:1rem"><summary>Questões para consulta externa (${catalog.references.length})</summary><p>Estas referências dependem de texto, figura ou tabela do original. Os novos simulados usam apenas questões completas no app.</p>${catalog.references.map(q=>`<div class="row"><div><strong>${esc(q.source)}</strong><p>${esc(q.prompt)}</p>${sourceLinks(q)}</div></div>`).join('')}</details>`:''}`;
 }
 function answers(q, selected, result, exam=false){
-  return `<div class="opts">${q.options.map((option,i)=>`<button class="opt ${result && i===q.answer?'correct':''} ${result&&i===selected&&i!==q.answer?'wrong':''}" aria-pressed="${i===selected}" data-${exam?'exam-choice':'choice'}="${i}" ${result?'disabled':''}><span class="choice">${choiceLabel(i)}</span>${esc(option)}</button>`).join('')}</div>`;
+  return `<div class="opts">${q.options.map((option,i)=>`<button class="opt ${result && i===q.answer?'correct':''} ${result&&i===selected&&i!==q.answer?'wrong':''}" aria-pressed="${i===selected}" data-${exam?'exam-choice':'choice'}="${i}" ${result?'disabled':''}><span class="choice">${choiceLabel(i)}</span><span class="option-text">${marked(option)}</span></button>`).join('')}</div>`;
 }
-function booklet(q){return q.referenceOnly?`<details class="reader"><summary>Ler enunciado e alternativas no caderno original</summary><div data-pdf="${esc(q.url)}"></div></details><div class="source">${ext(q.url,'Abrir caderno na questão (PDF)')}</div>`:'';}
+function statement(q){
+  if(q.referenceOnly) return '<p class="qtext">'+esc(q.prompt)+'</p><p class="fine">Questão de um simulado anterior. Consulte o enunciado na fonte original.</p>'+sourceLinks(q,false);
+  return '<p class="qtext">'+marked(q.prompt)+'</p>';
+}
+function consultation(q){
+  if(q.origin!=='oficial')return '';
+  return '<details class="reader"><summary>Consultar fontes da questão</summary>'+sourceLinks(q,false)+'</details>';
+}
 function beginStudy(ids,mode){
+  ids=ids.filter(id=>!byId.get(id)?.referenceOnly);
   if (!ids.length) return;
   study={ids,index:0,choice:null,result:null,mode};
   if(location.hash==='#estudo') render();else location.hash='estudo';
@@ -139,16 +155,16 @@ function studyView(){
   }
   const q=byId.get(study.ids[study.index]),result=study.result;
   return title(study.mode,'Questão '+(study.index+1)+' de '+study.ids.length)+`<article class="card">${chips(q,result?!result.fresh:latestAttempts(state).has(q.id))}
-  <p class="meta">${esc(q.source)}</p><p class="qtext">${esc(q.prompt)}</p>${booklet(q)}${answers(q,study.choice,result)}
+  <p class="meta">${esc(q.source)}</p>${statement(q)}${answers(q,study.choice,result)}${consultation(q)}
   ${result?`<div class="notice"><strong>${result.correct?'Você acertou.':'Resposta incorreta.'} Gabarito ${choiceLabel(q.answer)}.</strong><p>${esc(q.explanation||'Confira a alternativa indicada no gabarito definitivo da banca.')}</p>${sourceLinks(q)}<p class="fine">Revisão em ${dateFmt(result.due)}.</p></div>`:''}
   <div class="actions">${result?`<button class="primary" data-next-study>${study.index===study.ids.length-1?'Concluir sessão':'Próxima questão'}</button>`:`<button class="primary" data-submit-study ${study.choice===null?'disabled':''}>Conferir resposta</button>`}<button data-end-study>Sair da sessão</button></div></article>`;
 }
 function review(errors){
   const now=Date.now();
   const records=[...latestAttempts(state).values()].filter(a=>errors?!a.correct:a.due<=now).sort((a,b)=>a.due-b.due);
-  const ids=records.map(a=>a.questionId),upcoming=[...latestAttempts(state).values()].filter(a=>a.due>now).sort((a,b)=>a.due-b.due);
+  const ids=records.map(a=>a.questionId),canPractice=ids.some(id=>!byId.get(id).referenceOnly),upcoming=[...latestAttempts(state).values()].filter(a=>a.due>now).sort((a,b)=>a.due-b.due);
   return title(errors?'Caderno de erros':'Revisão espaçada',errors?'Questões cuja tentativa mais recente terminou em erro ou em branco.':'Após um erro, revise em 1 dia. Acertos seguidos agendam a próxima revisão em 3, 7, 15, 30 e 60 dias.')+
-  `<section class="panel"><h2>${errors?'Erros para retomar':'Revisões devidas'} · ${ids.length}</h2>${ids.length?`<div class="actions"><button class="primary" data-drill="${errors?'erros':'revisao'}">Iniciar revisão</button></div>`:empty(errors?'Seu caderno está em dia. Os erros das próximas sessões aparecerão aqui.':'Você está em dia com as revisões.')}<div class="list">${ids.map(id=>questionCard(byId.get(id),true)).join('')}</div></section>`+
+  `<section class="panel"><h2>${errors?'Erros para retomar':'Revisões devidas'} · ${ids.length}</h2>${ids.length?`<div class="actions"><button class="primary" data-drill="${errors?'erros':'revisao'}" ${canPractice?'':'disabled'}>Iniciar revisão</button></div>`:empty(errors?'Seu caderno está em dia. Os erros das próximas sessões aparecerão aqui.':'Você está em dia com as revisões.')}<div class="list">${ids.map(id=>questionCard(byId.get(id),true)).join('')}</div></section>`+
   (!errors&&upcoming.length?`<section class="panel" style="margin-top:1rem"><h2>Próximas revisões</h2>${upcoming.slice(0,10).map(a=>`<div class="row"><div><strong>${dateFmt(a.due)}</strong><p>${esc(byId.get(a.questionId).prompt.slice(0,95))}</p></div></div>`).join('')}</section>`:'');
 }
 function timeLeft(end){
@@ -161,13 +177,13 @@ function exams(){
     `<div class="cols"><section class="panel"><h2>Simulado completo</h2><p>40 questões com cinco alternativas e uma resposta correta. As questões novas têm prioridade na seleção.</p>
     ${rules.parts.map(p=>`<div class="chartline"><span>${p.area}</span><strong>${p.count} questões</strong></div>`).join('')}
     <div class="toolbar"><label>Origem das questões<select id="exam-source"><option value="todas">Oficiais e autorais</option><option value="oficial" ${examSource==='oficial'?'selected':''}>Somente oficiais da FAFIPA</option><option value="ia" ${examSource==='ia'?'selected':''}>Somente autorais por IA</option></select></label></div>
-    <p class="fine">Os itens oficiais abrem o caderno original e precisam de internet. Para estudar offline, selecione somente autorais.</p><div class="actions"><button class="primary" data-start-exam>Iniciar simulado</button></div></section>
+    <p class="fine">As questões são apresentadas no app. Durante a prova, o caderno original fica disponível para consulta.</p><div class="actions"><button class="primary" data-start-exam>Iniciar simulado</button></div></section>
     <section class="panel"><h2>Regras da objetiva</h2><p>O cronômetro de 4 horas inclui a marcação das respostas e continua enquanto o app estiver fechado.</p><p>Cada acerto vale 2 pontos. Questões em branco valem zero. O mínimo é 48 de 80 pontos (24 acertos).</p><p>A correção fica disponível ao entregar a prova ou esgotar o tempo. A prova de títulos é uma etapa separada, de até 20 pontos.</p><div class="source">${ext('./materiais/edital.pdf','Consultar edital · itens 10 e 11')}</div></section></div>`;
   const q=byId.get(exam.ids[exam.index]),sel=exam.answers[q.id];
   return title('Simulado em andamento','Suas marcações são salvas neste dispositivo.')+
     '<div class="actions"><a href="#painel" class="button">Sair e retomar depois</a><button data-ask-discard>Encerrar sem entregar</button></div><p class="fine exam-exit-note">Se sair para retomar depois, o cronômetro continua.</p>'+`<article class="card"><div class="panelhead"><strong>Questão ${exam.index+1} de ${exam.ids.length}</strong><strong class="countdown" id="timer" aria-label="Tempo restante">${timeLeft(exam.deadline)}</strong></div>
-  <span class="chip">${originName(q)}</span><span class="meta">${esc(q.area)}</span>${q.referenceOnly?`<p class="meta">${esc(q.source)}</p>`:''}
-  <p class="qtext">${esc(q.prompt)}</p>${booklet(q)}${answers(q,sel,null,true)}
+  <span class="chip">${originName(q)}</span><span class="meta">${esc(q.area)}</span>${q.origin==='oficial'?`<p class="meta">${esc(q.source)}</p>`:''}
+  ${statement(q)}${answers(q,sel,null,true)}${consultation(q)}
   <div class="actions"><button data-exam-index="${exam.index-1}" ${exam.index===0?'disabled':''}>Anterior</button><button data-exam-index="${exam.index+1}" ${exam.index===exam.ids.length-1?'disabled':''}>Próxima</button><button data-clear-choice ${sel==null?'disabled':''}>Deixar em branco</button></div>
   <h3>Folha de respostas</h3><div class="pagination">${exam.ids.map((id,i)=>`<button class="${exam.answers[id]==null?'':'answered'}" data-exam-index="${i}" ${i===exam.index?'aria-current="step"':''} aria-label="Questão ${i+1}, ${choiceLabel(exam.answers[id])}">${i+1} · ${exam.answers[id]==null?'–':choiceLabel(exam.answers[id])}</button>`).join('')}</div>
   <button class="primary" data-ask-finish>Entregar simulado</button></article>`;
@@ -184,7 +200,7 @@ function history(){
 function correction(x){
   const q=byId.get(x.questionId);
   const option=i=>i==null?'Em branco':choiceLabel(i)+' · '+q.options[i];
-  return `<p class="meta">${dateFmt(x.at)} · ${esc(x.mode)} · ${x.fresh?'Nova':'Repetida'} · ${originName(q)}</p><p class="qtext">${esc(q.prompt)}</p><p>Sua resposta: ${esc(option(x.choice))}<br>Gabarito: ${esc(option(q.answer))}</p><p>${esc(q.explanation)}</p>${sourceLinks(q)}`;
+  return `<p class="meta">${dateFmt(x.at)} · ${esc(x.mode)} · ${x.fresh?'Nova':'Repetida'} · ${originName(q)}</p>${statement(q)}<ol class="review-options" type="A">${q.options.map(o=>`<li>${marked(o)}</li>`).join('')}</ol><p>Sua resposta: ${esc(option(x.choice))}<br>Gabarito: ${esc(option(q.answer))}</p><p>${esc(q.explanation)}</p>${sourceLinks(q)}`;
 }
 let historyLimit=30;
 const views={painel:dashboard,edital:syllabus,banco:bank,estudo:studyView,simulados:exams,erros:()=>review(true),revisao:()=>review(false),historico:history};
@@ -201,7 +217,7 @@ async function saveExamAction(fn){
   const id=state.active?.id, index=state.active?.index;
   await transact(s=>{
     if(!s.active||s.active.id!==id)return;
-    if(Date.now()>=s.active.deadline)finishExam(s,questions);
+    if(Date.now()>=s.active.deadline)finishExam(s,allQuestions);
     else if(s.active.index===index)fn(s.active);
   });
 }
@@ -240,14 +256,6 @@ async function handleClick(e){
   render();
 }
 async function guarded(fn){if(busy)return;busy=true;try{await fn();}catch(e){notifyError(e);}finally{busy=false;}}
-main.addEventListener('toggle',e=>{
-  const slot=e.target.querySelector?.('[data-pdf]');
-  if(e.target.open&&slot&&!slot.firstChild){
-    const frame=document.createElement('iframe');
-    frame.title='Caderno original da Fundação FAFIPA';frame.src=slot.dataset.pdf;
-    frame.referrerPolicy='no-referrer';slot.append(frame);
-  }
-},true);
 main.addEventListener('click',e=>guarded(()=>handleClick(e)));
 main.addEventListener('change',e=>guarded(async()=>{
   const el=e.target;
@@ -262,7 +270,7 @@ dialog.addEventListener('click',e=>{
   guarded(async()=>{
     await transact(s=>{
       if(discardId)discardExam(s,discardId);
-      else if(s.active?.id===finishId)finishExam(s,questions);
+      else if(s.active?.id===finishId)finishExam(s,allQuestions);
     });
     dialog.close();
     location.hash=discardId?'simulados':'historico';
@@ -272,7 +280,7 @@ dialog.addEventListener('click',e=>{
 async function checkClock(){
   if(!state.active)return;
   if(Date.now()>=state.active.deadline){
-    await guarded(async()=>{await transact(s=>{if(s.active&&Date.now()>=s.active.deadline)finishExam(s,questions);});if(dialog.open)dialog.close();location.hash='historico';render();});
+    await guarded(async()=>{await transact(s=>{if(s.active&&Date.now()>=s.active.deadline)finishExam(s,allQuestions);});if(dialog.open)dialog.close();location.hash='historico';render();});
   }else{const el=document.getElementById('timer');if(el)el.textContent=timeLeft(state.active.deadline);}
 }
 window.addEventListener('hashchange',()=>{if(db){render();main.focus({preventScroll:true});window.scrollTo(0,0);}});
